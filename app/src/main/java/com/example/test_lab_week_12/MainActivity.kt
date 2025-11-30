@@ -9,12 +9,14 @@ import com.example.test_lab_week_12.MovieAdapter
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModel
 import com.example.test_lab_week_12.MovieViewModel
-import java.util.Calendar
 import com.google.android.material.snackbar.Snackbar
-
-
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import androidx.lifecycle.Lifecycle
 
 class MainActivity : AppCompatActivity() {
+
     private val movieAdapter by lazy {
         MovieAdapter(object : MovieAdapter.MovieClickListener {
             override fun onMovieClick(movie: Movie) {
@@ -26,30 +28,43 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
         val recyclerView: RecyclerView = findViewById(R.id.movie_list)
         recyclerView.adapter = movieAdapter
+
         val movieRepository = (application as MovieApplication).movieRepository
+
         val movieViewModel = ViewModelProvider(
-            this, object : ViewModelProvider.Factory {
+            this,
+            object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return MovieViewModel(movieRepository) as T
                 }
-            })[MovieViewModel::class.java]
-        movieViewModel.popularMovies.observe(this) { popularMovies ->
-            val currentYear =
-                Calendar.getInstance().get(Calendar.YEAR).toString()
-            movieAdapter.addMovies(
-                popularMovies
-                    .filter { movie ->
-// aman dari null
-                        movie.releaseDate?.startsWith(currentYear) == true
+            }
+        )[MovieViewModel::class.java]
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+
+                // Collect Movies
+                launch {
+                    movieViewModel.popularMovies.collect { movies ->
+                        movieAdapter.addMovies(movies)
                     }
-                    .sortedByDescending { it.popularity }
-            )
-        }
-        movieViewModel.error.observe(this) { error ->
-            if (error.isNotEmpty()) {
-                Snackbar.make(recyclerView, error, Snackbar.LENGTH_LONG).show()
+                }
+
+                // Collect Error Message
+                launch {
+                    movieViewModel.error.collect { error ->
+                        if (error.isNotEmpty()) {
+                            Snackbar.make(
+                                recyclerView,
+                                error,
+                                Snackbar.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
             }
         }
     }
